@@ -990,7 +990,7 @@ export default function App() {
             </div>
             <div>
               <div style={{fontSize:18,fontWeight:800,color:"#FFFFFF",letterSpacing:"-0.01em"}}>Pilotos de Innovacion</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",fontWeight:500}}>Planeta Formacion y Universidades - PMO</div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",fontWeight:500}}>Planeta Formacion y Universidades - PMO v2</div>
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
