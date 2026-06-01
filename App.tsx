@@ -1,18 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, onSnapshot, doc, setDoc } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDV7pNtlYDqdbcVOXuIxYNXudb3euWge58",
-  authDomain: "pilotos-innovacion.firebaseapp.com",
-  projectId: "pilotos-innovacion",
-  storageBucket: "pilotos-innovacion.firebasestorage.app",
-  messagingSenderId: "620101003875",
-  appId: "1:620101003875:web:5bdb1f96e47d87076b2656"
-};
+const BIN_ID = "6a1d677321f9ee59d2a4ad18";
+const API_KEY = "$2a$10$jfCUNV0unoB6fI.mX29RuOZt2cS6Wf1yL0FqkNkfNv5GjWMbXI17W";
+const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+async function dbGet(): Promise<any[]> {
+  const res = await fetch(BIN_URL + "/latest", {
+    headers: { "X-Master-Key": API_KEY }
+  });
+  const json = await res.json();
+  return json.record?.pilotos || [];
+}
+
+async function dbSave(pilotos: any[]): Promise<void> {
+  await fetch(BIN_URL, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY },
+    body: JSON.stringify({ pilotos })
+  });
+}
 
 const C = {
   navy:"#003366", blue:"#007BFF", bgPage:"#F0F4F8", bgCard:"#FFFFFF",
@@ -876,24 +882,26 @@ export default function App() {
   const [dbReady,setDbReady]=useState(false);
 
   useEffect(()=>{
-    const col = collection(db, "pilotos");
-    const unsub = onSnapshot(col, async (snap) => {
-      if (snap.empty) {
-        // Primera vez: carga datos iniciales
-        for (const p of PILOTOS_INIT) {
-          await setDoc(doc(db, "pilotos", String(p.id)), p);
+    let interval: any;
+    async function load() {
+      try {
+        let data = await dbGet();
+        if (data.length === 0) {
+          await dbSave(PILOTOS_INIT);
+          data = PILOTOS_INIT;
         }
-      } else {
-        const data = snap.docs.map(d => d.data());
-        data.sort((a:any, b:any) => a.id - b.id);
+        data.sort((a:any,b:any)=>a.id-b.id);
         setPilotos(data);
+        setDbReady(true);
+      } catch(e) {
+        console.error("DB error:", e);
+        setPilotos(PILOTOS_INIT);
+        setDbReady(true);
       }
-      setDbReady(true);
-    }, (error) => {
-      console.error("Firestore error:", error);
-      setDbReady(true);
-    });
-    return () => unsub();
+    }
+    load();
+    interval = setInterval(load, 8000);
+    return ()=>clearInterval(interval);
   },[]);
 
   const handleOpenDetail=p=>{
@@ -907,36 +915,42 @@ export default function App() {
     const piloto=pilotos.find(p=>p.id===id);
     const entrada={fecha,cambio:"Estado: "+(fields.estado||"sin cambio")+". Next steps: "+(fields.nextSteps||"-")};
     const updated={...piloto,...fields,ultimoUpdate:now.toLocaleDateString("es-ES"),historial:[...(piloto.historial||[]),entrada]};
-    await setDoc(doc(db,"pilotos",String(id)),updated);
+    const newPilotos=pilotos.map(p=>p.id===id?updated:p);
+    setPilotos(newPilotos);
+    await dbSave(newPilotos);
     setDetalle(prev=>prev&&prev.id===id?updated:prev);
     setFichaPopup(prev=>prev&&prev.id===id?updated:prev);
   };
 
   const handleAprobar=async id=>{
     const today=new Date().toLocaleDateString("es-ES");
-    const piloto=pilotos.find(p=>p.id===id);
-    await setDoc(doc(db,"pilotos",String(id)),{...piloto,estado:"Analisis",nextSteps:"Aprobado en comite - pendiente inicio",ultimoUpdate:today});
+    const updated=pilotos.map(p=>p.id===id?{...p,estado:"Analisis",nextSteps:"Aprobado en comite - pendiente inicio",ultimoUpdate:today}:p);
+    setPilotos(updated);
+    await dbSave(updated);
   };
 
   const handleRechazar=async id=>{
     const today=new Date().toLocaleDateString("es-ES");
-    const piloto=pilotos.find(p=>p.id===id);
-    await setDoc(doc(db,"pilotos",String(id)),{...piloto,estado:"Rechazado Comite",ultimoUpdate:today});
+    const updated=pilotos.map(p=>p.id===id?{...p,estado:"Rechazado Comite",ultimoUpdate:today}:p);
+    setPilotos(updated);
+    await dbSave(updated);
   };
 
   const handleSaveNuevo=async form=>{
     const newId=pilotos.length>0?Math.max(...pilotos.map(p=>p.id))+1:1;
     const iso2es=d=>d?d.split("-").reverse().join("/"):"";
-    const newPiloto={id:newId,nombre:form.nombre,agrupador:"",institucion:form.instituciones.join(", "),estado:"Pendiente aprobacion",owner:form.owner,nextSteps:"Pendiente de aprobacion en comite",objetivo:form.objetivo,hipotesis:form.hipotesis,alcance:form.alcance,kpis:form.kpis,inicio:iso2es(form.inicio),fin:iso2es(form.fin),equipo:form.equipo,cierre:null,ultimoUpdate:null};
-    await setDoc(doc(db,"pilotos",String(newId)),newPiloto);
+    const newPiloto={id:newId,nombre:form.nombre,agrupador:"",institucion:form.instituciones.join(", "),estado:"Pendiente aprobacion",owner:form.owner,nextSteps:"Pendiente de aprobacion en comite",objetivo:form.objetivo,hipotesis:form.hipotesis,alcance:form.alcance,kpis:form.kpis,inicio:iso2es(form.inicio),fin:iso2es(form.fin),equipo:form.equipo,cierre:null,ultimoUpdate:null,historial:[]};
+    const updated=[...pilotos,newPiloto];
+    setPilotos(updated);
+    await dbSave(updated);
   };
 
   const handleSaveCierre=async (id,tipo,cd)=>{
     const nuevoEstado=tipo==="OK"?"Cierre - OK":tipo==="KO"?"Cierre - KO":"Cancelado";
-    const piloto=pilotos.find(p=>p.id===id);
-    const updated={...piloto,estado:nuevoEstado,cierre:cd};
-    await setDoc(doc(db,"pilotos",String(id)),updated);
-    setDetalle(prev=>prev&&prev.id===id?updated:prev);
+    const updated=pilotos.map(p=>p.id===id?{...p,estado:nuevoEstado,cierre:cd}:p);
+    setPilotos(updated);
+    await dbSave(updated);
+    setDetalle(prev=>prev&&prev.id===id?{...prev,estado:nuevoEstado,cierre:cd}:prev);
     setCierre(null);
   };
 
@@ -1139,4 +1153,4 @@ export default function App() {
       {showNuevo&&<NuevoPilotoPanel onClose={()=>setShowNuevo(false)} onSave={handleSaveNuevo}/>}
     </div>
   );
-}//forzar despliegue
+}
