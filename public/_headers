@@ -1,0 +1,2 @@
+/*
+  Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://api.jsonbin.io https://firestore.googleapis.com https://www.googleapis.com
