@@ -1,4 +1,8 @@
+[build]
+  command = "npm run build"
+  publish = "build"
+
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://api.jsonbin.io"
+    Content-Security-Policy = "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"
